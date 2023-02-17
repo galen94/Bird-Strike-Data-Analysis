@@ -1,0 +1,797 @@
+---
+title: "Practicum I"
+author: "Galen Otten, Matt Nolan, Mark Carter"
+output:
+  html_document:
+    df_print: paged
+---
+
+Group Members:
+Galen Otten: otten.g@northeastern.edu
+Matt Nolan: nolan.matt@northeastern.edu
+Mark Carter: carter.m@northeastern.edu
+
+ERD Diagram on LucidChart: https://lucid.app/lucidchart/fef41e44-87c8-426a-83f5-5708d98386d4/edit?invitationId=inv_baca2dca-0ea5-49b5-baae-2f2766b1db8a
+
+```{r}
+# Library
+library(RMySQL)
+
+# Settings
+db_user <- 'admin'
+db_password <- 'E7nc8$4dEtjIjVF'
+db_name <- 'PracticumI'
+db_host <- 'cs5200-dbs.czafxup9tot6.us-east-2.rds.amazonaws.com' # AWS Host
+db_port <- 3306
+
+# Read data from db
+mydb <- dbConnect(MySQL(), user = db_user, password = db_password,
+                  dbname = db_name, host = db_host, port = db_port)
+```
+
+```{r}
+path <- "/home/mark/Documents/Northeastern/MSCS/Fall 2021/CS 5200/Practicum I"
+fn <- "BirdStrikesData.csv"
+
+fileName <- paste(path, fn, sep = "/")
+
+# 3) Load the Bird Strikes CSV file into R
+birdDF <- read.csv(fileName, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE)
+```
+
+```{r}
+head(birdDF)
+```
+
+Table Drops
+```{sql connection=mydb}
+DROP TABLE IF EXISTS wildlife_strike
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS strike_precipitation
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS strike
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS effect
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS wildlife_remains
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS wildlife
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS wildlife_size
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS flight_stage
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS phase
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS precipitation
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS sky
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS flight
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS airport
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS state
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS airline
+```
+
+```{sql connection=mydb}
+DROP TABLE IF EXISTS aircraft
+```
+
+
+2) Table Creates
+```{sql connection=mydb}
+-- 
+-- aircraft
+--
+CREATE TABLE IF NOT EXISTS aircraft (
+  aircraft_id INTEGER PRIMARY KEY,
+  aircraft_type TEXT NOT NULL,
+  make_model TEXT NOT NULL,
+  num_engines INTEGER NOT NULL,
+  is_large TEXT NOT NULL,
+  CONSTRAINT aircraft_chk_a CHECK 
+        (aircraft_id >= 0),
+  CONSTRAINT aircraft_chk_n CHECK
+        (num_engines >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- airline
+--
+CREATE TABLE IF NOT EXISTS airline (
+  airline_id INTEGER PRIMARY KEY,
+  airline_name TEXT NOT NULL,
+  CONSTRAINT airline_chk_a CHECK 
+        (airline_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- state
+--
+CREATE TABLE IF NOT EXISTS state (
+  state_id INTEGER PRIMARY KEY,
+  state_name TEXT NOT NULL,
+  CONSTRAINT state_chk_s CHECK 
+        (state_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- airport
+--
+CREATE TABLE IF NOT EXISTS airport (
+  airport_id INTEGER PRIMARY KEY,
+  airport_name TEXT NOT NULL,
+  state_id INTEGER NOT NULL,
+  CONSTRAINT airport_fk_s FOREIGN KEY
+	    (state_id) REFERENCES state (state_id),
+  CONSTRAINT airport_chk_a CHECK 
+        (airport_id >= 0),
+  CONSTRAINT aircraft_chk_s CHECK
+        (state_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- flight
+--
+CREATE TABLE IF NOT EXISTS flight (
+  flight_id INTEGER PRIMARY KEY,
+  flight_record INTEGER NOT NULL,
+  airport_id INTEGER NOT NULL,
+  flight_date TEXT NOT NULL,
+  airline_id INTEGER NOT NULL,
+  aircraft_id INTEGER NOT NULL,
+  CONSTRAINT flight_fk_a FOREIGN KEY
+	    (airport_id) REFERENCES airport (airport_id),
+	CONSTRAINT flight_fk_r FOREIGN KEY
+	    (airline_id) REFERENCES airline (airline_id),
+	CONSTRAINT flight_fk_c FOREIGN KEY
+	    (aircraft_id) REFERENCES aircraft (aircraft_id),
+  CONSTRAINT flight_chk_f CHECK 
+        (flight_id >= 0),
+  CONSTRAINT flight_chk_fr CHECK 
+        (flight_record >= 0),
+  CONSTRAINT flight_chk_a CHECK
+        (airport_id >= 0),
+  CONSTRAINT flight_chk_r CHECK 
+        (airline_id >= 0),
+  CONSTRAINT flight_chk_c CHECK 
+        (aircraft_id >= 0)
+);
+```
+
+
+```{sql connection=mydb}
+-- 
+-- sky
+--
+CREATE TABLE IF NOT EXISTS sky (
+  sky_id INTEGER PRIMARY KEY,
+  sky_conditions TEXT NOT NULL,
+  CONSTRAINT sky_chk_s CHECK 
+        (sky_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- precipitation
+--
+CREATE TABLE IF NOT EXISTS precipitation (
+  precipitation_id INTEGER PRIMARY KEY,
+  precipitation_conditions TEXT NOT NULL,
+  CONSTRAINT precipitation_chk_p CHECK 
+        (precipitation_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- phase
+--
+CREATE TABLE IF NOT EXISTS phase (
+  phase_id INTEGER PRIMARY KEY,
+  phase_name TEXT NOT NULL,
+  CONSTRAINT phase_chk_p CHECK 
+        (phase_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- flight_stage
+--
+CREATE TABLE IF NOT EXISTS flight_stage (
+  flight_stage_id INTEGER PRIMARY KEY,
+  phase_id INTEGER NOT NULL,
+  altitude_in_feet INTEGER NOT NULL,
+  CONSTRAINT flight_stage_fk_p FOREIGN KEY
+	    (phase_id) REFERENCES phase (phase_id),
+  CONSTRAINT flight_stage_chk_f CHECK 
+        (flight_stage_id >= 0),
+  CONSTRAINT flight_stage_chk_p CHECK 
+        (phase_id >= 0),
+  CONSTRAINT flight_stage_chk_a CHECK 
+        (altitude_in_feet >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- wildlife_size
+--
+CREATE TABLE IF NOT EXISTS wildlife_size (
+  size_id INTEGER PRIMARY KEY,
+  size TEXT NOT NULL,
+  CONSTRAINT wildlife_size_chk_s CHECK 
+        (size_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- wildlife
+--
+CREATE TABLE IF NOT EXISTS wildlife (
+  wildlife_id INTEGER PRIMARY KEY,
+  size_id INTEGER NOT NULL,
+  species TEXT NOT NULL,
+  CONSTRAINT wildlife_fk_s FOREIGN KEY
+	    (size_id) REFERENCES wildlife_size (size_id),
+  CONSTRAINT wildlife_chk_w CHECK 
+        (wildlife_id >= 0),
+  CONSTRAINT wildlife_chk_s CHECK 
+        (size_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- wildlife_remains
+--
+CREATE TABLE IF NOT EXISTS wildlife_remains (
+  wildlife_remains_id INTEGER PRIMARY KEY,
+  remains_collected TINYINT NOT NULL,
+  remains_sent_to_smithsonian TINYINT NOT NULL,
+  CONSTRAINT wildlife_remains_chk_w CHECK 
+        (wildlife_remains_id >= 0),
+  CONSTRAINT wildlife_remains_chk_r CHECK 
+        (remains_collected >= 0),
+  CONSTRAINT wildlife_remains_chk_s CHECK 
+        (remains_sent_to_smithsonian >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- effect
+--
+CREATE TABLE IF NOT EXISTS effect (
+  effect_id INTEGER PRIMARY KEY,
+  impact_to_flight TEXT NOT NULL,
+  indicated_damage TEXT NOT NULL,
+  cost_total_dollars INTEGER NOT NULL,
+  num_people_injured INTEGER NOT NULL,
+  num_wildlife_struck_actual INTEGER NOT NULL,
+  wildlife_remains_id INTEGER NOT NULL,
+  CONSTRAINT effect_fk_w FOREIGN KEY
+	    (wildlife_remains_id) REFERENCES wildlife_remains (wildlife_remains_id),
+  CONSTRAINT effect_chk_e CHECK 
+        (effect_id >= 0),
+  CONSTRAINT effect_chk_c CHECK 
+        (cost_total_dollars >= 0),
+  CONSTRAINT effect_chk_n CHECK 
+        (num_people_injured >= 0),
+  CONSTRAINT effect_chk_w CHECK 
+        (wildlife_remains_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- strike
+--
+CREATE TABLE IF NOT EXISTS strike (
+  strike_id INTEGER PRIMARY KEY,
+  strike_record INTEGER NOT NULL,
+  flight_stage_id INTEGER NOT NULL,
+  remarks TEXT NOT NULL,
+  sky_id INTEGER NOT NULL,
+  pilot_warned_of_wildlife TEXT NOT NULL,
+  flight_id INTEGER NOT NULL,
+  effect_id INTEGER NOT NULL,
+  CONSTRAINT strike_fk_f FOREIGN KEY
+	    (flight_stage_id) REFERENCES flight_stage (flight_stage_id),
+	CONSTRAINT strike_fk_s FOREIGN KEY
+	    (sky_id) REFERENCES sky (sky_id),
+	CONSTRAINT strike_fk_l FOREIGN KEY
+	    (flight_id) REFERENCES flight (flight_id),
+	CONSTRAINT strike_fk_e FOREIGN KEY
+	    (effect_id) REFERENCES effect (effect_id),
+  CONSTRAINT strike_chk_s CHECK
+        (strike_id >= 0),
+  CONSTRAINT strike_chk_r CHECK
+        (strike_record >= 0),
+  CONSTRAINT strike_chk_f CHECK 
+        (flight_stage_id >= 0),
+  CONSTRAINT strike_chk_k CHECK 
+        (sky_id >= 0),
+  CONSTRAINT strike_chk_g CHECK 
+        (flight_id >= 0),
+  CONSTRAINT strike_chk_e CHECK 
+        (effect_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- wildlife_strike
+--
+CREATE TABLE IF NOT EXISTS wildlife_strike (
+  wildlife_id INTEGER NOT NULL,
+  strike_id INTEGER NOT NULL,
+  CONSTRAINT wildlife_strike_pk PRIMARY KEY
+	         (wildlife_id, strike_id),
+	CONSTRAINT wildlife_strike_fk_w FOREIGN KEY
+	    (wildlife_id) REFERENCES wildlife (wildlife_id),
+	CONSTRAINT wildlife_strike_fk_s FOREIGN KEY
+	    (strike_id) REFERENCES strike (strike_id),
+  CONSTRAINT wildlife_strike_chk_w CHECK 
+        (wildlife_id >= 0),
+  CONSTRAINT wildlife_strike_chk_s CHECK 
+        (strike_id >= 0)
+);
+```
+
+```{sql connection=mydb}
+-- 
+-- strike_precipitation
+--
+CREATE TABLE IF NOT EXISTS strike_precipitation (
+  strike_id INTEGER NOT NULL,
+  precipitation_id INTEGER NOT NULL,
+  CONSTRAINT strike_precipitation_pk PRIMARY KEY
+	         (strike_id, precipitation_id),
+	CONSTRAINT strike_precipitation_fk_s FOREIGN KEY
+	    (strike_id) REFERENCES strike (strike_id),
+	CONSTRAINT strike_precipitation_fk_p FOREIGN KEY
+	    (precipitation_id) REFERENCES precipitation (precipitation_id),
+  CONSTRAINT strike_precipitation_chk_s CHECK 
+        (strike_id >= 0),
+  CONSTRAINT strike_precipitation_chk_p CHECK 
+        (precipitation_id >= 0)
+);
+```
+
+3) Transfer data from main data frame into mirror data frames
+Create "Mirror" Data Frames
+```{r}
+#airline
+library(sqldf)
+detach("package:RMySQL", unload = TRUE)
+
+df.airline <- sqldf::sqldf("SELECT 1 AS airline_id, `Aircraft: Airline/Operator` AS airline_name FROM `birdDF` GROUP BY airline_name")
+
+# assign an artificial PK using a counter
+n.airline <- nrow(df.airline)
+df.airline[,1] <- 100000 + seq(1, n.airline)
+
+head(df.airline)
+```
+
+```{r}
+#aircraft
+df.aircraft <- sqldf::sqldf("SELECT 1 AS aircraft_id, `Aircraft: Type` AS aircraft_type, `Aircraft: Make/Model` AS make_model, `Aircraft: Number of engines?` AS num_engines, `Is Aircraft Large?` AS is_large 
+                             FROM `birdDF`
+                             GROUP BY make_model")
+
+# assign an artificial PK using a counter
+n.aircraft <- nrow(df.aircraft)
+df.aircraft[,1] <- 200000 + seq(1, n.aircraft)
+
+head(df.aircraft)
+```
+
+```{r}
+#state
+df.state <- sqldf::sqldf("SELECT 1 AS state_id, `Origin State` AS state_name FROM `birdDF` GROUP BY state_name")
+
+# assign an artificial PK using a counter
+n.state <- nrow(df.state)
+df.state[,1] <- 300000 + seq(1, n.state)
+
+head(df.state)
+```
+
+```{r}
+#airport
+df.airport <- sqldf::sqldf("SELECT 1 AS airport_id, `Airport: Name` AS airport_name, f.state_id AS state_id 
+                                             FROM `birdDF` AS k 
+                                             JOIN `df.state` AS f ON k.`Origin State` = f.state_name 
+                                             GROUP BY airport_name")
+
+# assign an artificial PK using a counter
+n.airport <- nrow(df.airport)
+df.airport[,1] <- 400000 + seq(1, n.airport)
+
+head(df.airport)
+```
+Note: Flight and Strike have the same number of rows.  This is because without a unique identifier for flight in the raw data, we must assume that each strike corresponds with a unique flight via Record ID.  Therefore, in the ERD Diagram their relationship is 1-to-1.
+```{r}
+#flight
+
+df.flight <- sqldf::sqldf("SELECT 1 AS flight_id, `Record ID` as flight_record, arpt.airport_id AS airport_id, `FlightDate` AS flight_date, arln.airline_id AS airline_id, arcrft.aircraft_id AS aircraft_id 
+                          FROM `birdDF` AS k
+                          JOIN `df.airport` AS arpt ON k.`Airport: Name` = arpt.airport_name
+                          JOIN `df.airline` AS arln ON k.`Aircraft: Airline/Operator` = arln.airline_name
+                          JOIN `df.aircraft` AS arcrft ON k.`Aircraft: Make/Model` = arcrft.make_model
+                          GROUP BY flight_record")
+
+# assign an artificial PK using a counter
+n.flight <- nrow(df.flight)
+df.flight[,1] <- 500000 + seq(1, n.flight)
+
+head(df.flight)
+```
+
+```{r}
+#sky
+df.sky <- sqldf::sqldf("SELECT 1 AS sky_id, `Conditions: Sky` AS sky_conditions FROM `birdDF` GROUP BY sky_conditions")
+
+# assign an artificial PK using a counter
+n.sky <- nrow(df.sky)
+df.sky[,1] <- 600000 + seq(1, n.sky)
+
+head(df.sky)
+```
+
+```{r}
+#precipitation
+df.precipitation <- sqldf::sqldf("SELECT 1 AS precipitation_id, `Conditions: Precipitation` AS precipitation_conditions FROM `birdDF` GROUP BY precipitation_conditions")
+
+# assign an artificial PK using a counter
+n.precipitation <- nrow(df.precipitation)
+df.precipitation[,1] <- 700000 + seq(1, n.precipitation)
+
+head(df.precipitation)
+```
+
+```{r}
+#phase
+df.phase <- sqldf::sqldf("SELECT 1 AS phase_id, `When: Phase of flight` AS phase_name FROM `birdDF` GROUP BY phase_name")
+
+# assign an artificial PK using a counter
+n.phase <- nrow(df.phase)
+df.phase[,1] <- 800000 + seq(1, n.phase)
+
+head(df.phase)
+```
+
+```{r}
+#flight_stage
+df.flight_stage <- sqldf::sqldf("SELECT DISTINCT 1 AS flight_stage_id, phs.phase_id AS phase_id, `Feet above ground` AS altitude_in_feet
+                                 FROM `birdDF` AS k
+                                 JOIN `df.phase` AS phs ON k.`When: Phase of flight` = phs.phase_name")
+
+# assign an artificial PK using a counter
+n.flight_stage <- nrow(df.flight_stage)
+df.flight_stage[,1] <- 900000 + seq(1, n.flight_stage)
+
+head(df.flight_stage)
+```
+
+```{r}
+#wildlife_size
+df.wildlife_size <- sqldf::sqldf("SELECT 1 AS size_id, `Wildlife: Size` AS size FROM `birdDF` GROUP BY size")
+
+# assign an artificial PK using a counter
+n.wildlife_size <- nrow(df.wildlife_size)
+df.wildlife_size[,1] <-1100000 + seq(1, n.wildlife_size)
+
+head(df.wildlife_size)
+```
+
+```{r}
+#wildlife
+df.wildlife <- sqldf::sqldf("SELECT 1 AS wildlife_id, w.size_id AS size_id, `Wildlife: Species` AS species 
+                             FROM `birdDF` AS k
+                             JOIN `df.wildlife_size` AS w ON k.`Wildlife: Size` = w.size
+                             GROUP BY species")
+
+# assign an artificial PK using a counter
+n.wildlife <- nrow(df.wildlife)
+df.wildlife[,1] <- 1200000 + seq(1, n.wildlife)
+
+head(df.wildlife)
+```
+
+```{r}
+#wildlife_remains
+df.wildlife_remains <- sqldf::sqldf("SELECT DISTINCT 1 AS wildlife_remains_id, `Remains of wildlife collected?` AS remains_collected, `Remains of wildlife sent to Smithsonian` AS remains_sent_to_smithsonian 
+                                     FROM `birdDF`")
+
+# assign an artificial PK using a counter
+n.wildlife_remains <- nrow(df.wildlife_remains)
+df.wildlife_remains[,1] <- 1300000 + seq(1, n.wildlife_remains)
+
+head(df.wildlife_remains)
+```
+
+```{r}
+#effect
+df.effect <- sqldf::sqldf("SELECT DISTINCT 1 AS effect_id, `Effect: Impact to flight` AS impact_to_flight, `Effect: Indicated Damage` AS indicated_damage, `Cost: Total $` AS cost_total_dollars, `Number of people injured` AS num_people_injured, `Wildlife: Number Struck Actual` AS num_wildlife_struck_actual, wr.wildlife_remains_id AS wildlife_remains_id 
+                           FROM `birdDF` AS k
+                           JOIN `df.wildlife_remains` AS wr ON k.`Remains of wildlife collected?` = wr.remains_collected 
+                                AND k.`Remains of wildlife sent to Smithsonian` = wr.remains_sent_to_smithsonian")
+
+# assign an artificial PK using a counter
+n.effect <- nrow(df.effect)
+df.effect[,1] <- 1400000 + seq(1, n.effect)
+
+head(df.effect)
+```
+
+```{r}
+#strike
+
+df.strike <- sqldf::sqldf("SELECT 1 AS strike_id, `Record ID` as strike_record, fs.flight_stage_id AS flight_stage_id, `Remarks` AS remarks, s.sky_id AS sky_id, `Pilot warned of birds or wildlife?` AS pilot_warned_of_wildlife, f.flight_id AS flight_id, e.effect_id AS effect_id 
+                           FROM `birdDF` AS k
+                           JOIN `df.flight_stage` AS fs ON k.`Feet above ground` = fs.altitude_in_feet
+                           JOIN `df.sky` AS s ON k.`Conditions: Sky` = s.sky_conditions
+                           JOIN `df.flight` AS f ON k.`Record ID` = f.flight_record
+                           JOIN `df.effect` AS e ON k.`Effect: Impact to flight` = e.impact_to_flight 
+                                  AND k.`Effect: Indicated Damage` = e.indicated_damage
+                                  AND k.`Cost: Total $` = e.cost_total_dollars
+                                  AND k.`Number of people injured` = e.num_people_injured
+                                  AND k.`Wildlife: Number Struck Actual` = e.num_wildlife_struck_actual
+                           GROUP BY strike_record")
+
+# assign an artificial PK using a counter
+n.strike <- nrow(df.strike)
+df.strike[,1] <- 1500000 + seq(1, n.strike)
+
+head(df.strike)
+```
+
+```{r}
+#wildlife_strike
+df.wildlife_strike <- sqldf::sqldf("SELECT w.wildlife_id AS wildlife_id, s.strike_id AS strike_id 
+                                    FROM `birdDF` AS k
+                                    JOIN `df.wildlife` AS w ON k.`Wildlife: Species` = w.species
+                                    JOIN `df.strike` AS s ON k.`Record ID` = s.strike_record")
+
+# Composite PK; no need to assign an artificial PK using a counter
+head(df.wildlife_strike)
+```
+
+```{r}
+#strike_precipitation
+df.strike_precipitation <- sqldf::sqldf("SELECT s.strike_id AS strike_id, p.precipitation_id AS precipitation_id  
+                                         FROM `birdDF` as k
+                                         JOIN `df.strike` AS s ON k.`Record ID` = s.strike_record
+                                         JOIN `df.precipitation` AS p ON k.`Conditions: Precipitation` = p.precipitation_conditions
+                                         GROUP BY strike_id")
+
+head(df.strike_precipitation)
+# Composite PK; no need to assign an artificial PK using a counter
+```
+
+
+
+3) Write the mirror data frames to the database
+Bulk Load Data to Database
+```{r}
+library(RMySQL)
+
+dbWriteTable(mydb, "wildlife_strike", df.wildlife_strike, field.types = c(wildlife_id = 'INTEGER', strike_id = 'INTEGER'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "strike_precipitation", df.strike_precipitation, field.types = c(strike_id = 'INTEGER', precipitation_id = 'INTEGER'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "strike", df.strike, field.types = c(strike_id = 'INTEGER', strike_record = 'INTEGER', flight_stage_id = 'INTEGER', remarks = 'TEXT', sky_id = 'INTEGER', pilot_warned_of_wildlife = 'TEXT', flight_id = 'INTEGER', effect_id = 'INTEGER'), row.names=FALSE, overwrite = T)
+
+dbWriteTable(mydb, "effect", df.effect, field.types = c(effect_id = 'INTEGER', impact_to_flight = 'TEXT', indicated_damage = 'TEXT', cost_total_dollars = 'INTEGER', num_people_injured = 'INTEGER', num_wildlife_struck_actual = 'INTEGER', wildlife_remains_id = 'INTEGER'), row.names=FALSE, overwrite = T)
+
+dbWriteTable(mydb, "wildlife_remains", df.wildlife_remains, field.types = c(wildlife_remains_id = 'INTEGER', remains_collected = 'TINYINT', remains_sent_to_smithsonian = 'TINYINT'), row.names=FALSE, overwrite = T)
+
+dbWriteTable(mydb, "wildlife", df.wildlife, field.types = c(wildlife_id = 'INTEGER', size_id = 'INTEGER', species = 'TEXT'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "wildlife_size", df.wildlife_size, field.types = c(size_id = 'INTEGER', size = 'TEXT'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "flight_stage", df.flight_stage, field.types = c(flight_stage_id = 'INTEGER', phase_id = 'INTEGER', altitude_in_feet = 'INTEGER'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "phase", df.phase, field.types = c(phase_id = 'INTEGER', phase_name = 'TEXT'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "precipitation", df.precipitation, field.types = c(precipitation_id = 'INTEGER', precipitation_conditions = 'TEXT'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "sky", df.sky, field.types = c(sky_id = 'INTEGER', sky_conditions = 'TEXT'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "flight", df.flight, field.types = c(flight_id = 'INTEGER', flight_record = 'INTEGER', airport_id = 'INTEGER', flight_date = 'TEXT', airline_id = 'INTEGER', aircraft_id = 'INTEGER'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "airport", df.airport, field.types = c(airport_id = 'INTEGER', airport_name = 'TEXT', state_id = 'INTEGER'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "state", df.state, field.types = c(state_id = 'INTEGER', state_name = 'TEXT'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "airline", df.airline, field.types = c(airline_id = 'INTEGER', airline_name = 'TEXT'), row.names = F, overwrite = T)
+
+dbWriteTable(mydb, "aircraft", df.aircraft, field.types = c(aircraft_id = 'INTEGER', aircraft_type = 'TEXT', make_model = 'TEXT', num_engines = 'INTEGER', is_large = 'TEXT'), row.names = F, overwrite = T)
+
+```
+
+Table Queries
+```{sql connection=mydb}
+-- 
+-- 4.
+--
+SELECT COUNT(*) AS Number_of_Strikes, airline_name FROM strike
+JOIN flight_stage ON strike.flight_stage_id = flight_stage.flight_stage_id
+JOIN phase ON flight_stage.phase_id = phase.phase_id
+JOIN flight ON strike.flight_id = flight.flight_id
+JOIN airline ON flight.airline_id = airline.airline_id
+WHERE phase.phase_name IN ('Climb', 'Take-off run')
+GROUP BY airline.airline_id
+ORDER BY Number_of_Strikes DESC;
+```
+
+```{sql connection=mydb}
+-- 
+-- 5.
+--
+SELECT COUNT(*) AS Number_of_Strikes, airport_name FROM strike
+JOIN flight ON strike.flight_id = flight.flight_id
+JOIN airport ON flight.airport_id = airport.airport_id
+GROUP BY airport.airport_name
+ORDER BY Number_of_Strikes DESC;
+```
+
+```{sql connection=mydb}
+-- 
+-- 6.
+--
+SELECT COUNT(*) AS Number_of_Strikes, SUBSTRING(flight_date, -9, 4) AS year FROM strike
+JOIN flight ON strike.flight_id = flight.flight_id
+GROUP BY year
+ORDER BY year ASC;
+```
+
+```{r}
+# 7) Create Data Frame for strikes that occurred during take off and climb in 2008, 2009, 2010, and 2011
+detach("package:RMySQL", unload = TRUE)
+df.bchart <- sqldf::sqldf("SELECT COUNT(*) AS Number_of_StrikesTC, SUBSTRING(flight_date, -9, 4) AS year 
+                           FROM `df.strike`
+                           JOIN `df.flight` ON `df.strike`.flight_id = `df.flight`.flight_id
+                           JOIN `df.flight_stage` ON `df.strike`.flight_stage_id = `df.flight_stage`.flight_stage_id
+                           JOIN `df.phase` ON `df.flight_stage`.phase_id = `df.phase`.phase_id
+                           WHERE year IN ('2008', '2009', '2010', '2011')
+                                  AND `df.phase`.phase_name IN ('Take-off run', 'Climb') 
+                           GROUP BY year
+                           ORDER BY year DESC")
+
+df.bchart
+```
+
+```{r}
+# 7) Create Data Frame for strikes that occurred during descent, approach, and 
+# landing in 2008, 2009, 2010, and 2011
+df.bchart2 <- sqldf::sqldf("SELECT COUNT(*) AS Number_of_StrikesDAL, SUBSTRING(flight_date, -9, 4) AS year 
+                           FROM `df.strike`
+                           JOIN `df.flight` ON `df.strike`.flight_id = `df.flight`.flight_id
+                           JOIN `df.flight_stage` ON `df.strike`.flight_stage_id = `df.flight_stage`.flight_stage_id
+                           JOIN `df.phase` ON `df.flight_stage`.phase_id = `df.phase`.phase_id
+                           WHERE year IN ('2008', '2009', '2010', '2011')
+                                  AND `df.phase`.phase_name IN ('Descent', 'Approach', 'Landing') 
+                           GROUP BY year
+                           ORDER BY year DESC")
+df.bchart2
+```
+
+```{r}
+# 7) JOIN df.bchart and df.bchart2
+df.bchart3 <- sqldf::sqldf("SELECT Number_of_StrikesTC, Number_of_StrikesDAL, `df.bchart`.year
+                            FROM `df.bchart`
+                            JOIN `df.bchart2` ON `df.bchart`.year = `df.bchart2`.year")
+df.bchart3
+```
+
+```{r}
+# 7) Build a column chart
+#Graph the results
+A2008 <- c (df.bchart3$Number_of_StrikesTC[1], df.bchart3$Number_of_StrikesDAL[1])
+B2009 <- c (df.bchart3$Number_of_StrikesTC[2], df.bchart3$Number_of_StrikesDAL[2])
+C2010 <- c (df.bchart3$Number_of_StrikesTC[3], df.bchart3$Number_of_StrikesDAL[3])
+D2011 <- c (df.bchart3$Number_of_StrikesTC[4], df.bchart3$Number_of_StrikesDAL[4])
+data<- data.frame(A2008, B2009, C2010, D2011)
+names(data)<- c("2008","2009","2010","2011")
+barplot(height=as.matrix(data),main="Strikes by Year",xlab="Year",ylab="Strikes", beside=TRUE,col=rainbow (2))
+legend ("topright", c("Number of Strikes TC", "Number of Strikes DAL"), cex=0.8, bty="n", fill=rainbow(2))
+```
+
+8) Stored Procedure
+```{r}
+library(RMySQL)
+```
+
+```{sql connection=mydb}
+DROP PROCEDURE IF EXISTS delete_strike
+```
+
+Takes a flight_id as the parameter: ID.  This stored procedure will delete the 
+row in flight and strike that corresponds to the flight_id passed in.
+```{sql connection=mydb}
+CREATE PROCEDURE delete_strike
+(IN ID INTEGER)
+BEGIN
+  DELETE FROM flight f
+  WHERE f.flight_id = ID;
+  DELETE FROM strike s
+  WHERE s.flight_id = ID;
+END;
+```
+
+Test Stored Procedure
+Before
+```{sql connection=mydb}
+SELECT * FROM strike;
+```
+
+```{sql connection=mydb}
+SELECT * FROM flight
+```
+
+Call Stored Procedure
+```{sql connection=mydb}
+CALL delete_strike(500001);
+```
+
+After
+```{sql connection=mydb}
+SELECT * FROM strike;
+```
+
+```{sql connection=mydb}
+SELECT * FROM flight
+```
+
+Disconnect from Database
+```{r}
+dbDisconnect(mydb)
+```
+
+
